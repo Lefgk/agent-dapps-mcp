@@ -1,6 +1,6 @@
 {
   "$schema": "https://static.modelcontextprotocol.io/schemas/2025-12-11/server.schema.json",
-  "name": "io.github.lefgk/agent-dapps-mcp",
+  "name": "io.github.Lefgk/agent-dapps-mcp",
   "description": "Read state and build unsigned txs for 10 agent dapps on Base.",
   "title": "Agent Dapps MCP",
   "repository": {

@@ -2,7 +2,7 @@
   "name": "agent-dapps-mcp",
   "version": "1.0.0",
   "description": "MCP server and AgentKit plugin for Lef's 10 agent dapps on Base. Builds unsigned transactions only; never holds keys or broadcasts.",
-  "mcpName": "io.github.lefgk/agent-dapps-mcp",
+  "mcpName": "io.github.Lefgk/agent-dapps-mcp",
   "type": "module",
   "license": "MIT",
   "author": "Lef Giak <lg.playstudio@gmail.com>",

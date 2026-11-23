@@ -105,7 +105,7 @@ Fork tests create vaults on the official factories, impersonate owners only for 
 
 ## Listings
 
-- Official MCP registry metadata: `server.json` (`io.github.lefgk/agent-dapps-mcp`), listed as a remote-only Streamable HTTP server at `https://agent-dapps-mcp.graph-proxy.workers.dev/mcp`. This package is not published to npm.
+- Official MCP registry metadata: `server.json` (`io.github.Lefgk/agent-dapps-mcp`), listed as a remote-only Streamable HTTP server at `https://agent-dapps-mcp.graph-proxy.workers.dev/mcp`. This package is not published to npm.
 - Glama: `glama.json` names `Lefgk` as maintainer.
 
 Discovery files (`llms.txt` and `/.well-known/ai-catalog.json`) are also on each dapp site.
