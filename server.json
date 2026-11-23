@@ -8,24 +8,10 @@
     "source": "github"
   },
   "version": "1.0.0",
-  "packages": [
+  "remotes": [
     {
-      "registryType": "npm",
-      "registryBaseUrl": "https://registry.npmjs.org",
-      "identifier": "agent-dapps-mcp",
-      "version": "1.0.0",
-      "transport": {
-        "type": "stdio"
-      },
-      "environmentVariables": [
-        {
-          "name": "BASE_RPC_URL",
-          "description": "Optional Base RPC URL. Defaults to https://mainnet.base.org. Not a secret.",
-          "isRequired": false,
-          "format": "string",
-          "isSecret": false
-        }
-      ]
+      "type": "streamable-http",
+      "url": "https://agent-dapps-mcp.graph-proxy.workers.dev/mcp"
     }
   ]
 }

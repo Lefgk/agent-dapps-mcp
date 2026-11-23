@@ -48,11 +48,29 @@ Example Claude Desktop / Cursor MCP config:
 
 The same tools are served over Streamable HTTP from `src/worker.ts`.
 
+Production URL (free Cloudflare Worker):
+
+`https://agent-dapps-mcp.graph-proxy.workers.dev/mcp`
+
+Example Cursor / Claude MCP config for the hosted server:
+
+```json
+{
+  "mcpServers": {
+    "agent-dapps": {
+      "url": "https://agent-dapps-mcp.graph-proxy.workers.dev/mcp"
+    }
+  }
+}
+```
+
+Local Worker:
+
 ```bash
 npx wrangler dev
 ```
 
-Connect a client to `http://127.0.0.1:8787/mcp`. Production deploy needs a Cloudflare login (`npx wrangler login` and `npx wrangler deploy`). The remote URL is then added to `server.json` under `remotes`.
+Connect a client to `http://127.0.0.1:8787/mcp`.
 
 ## AgentKit
 
@@ -87,8 +105,8 @@ Fork tests create vaults on the official factories, impersonate owners only for 
 
 ## Listings
 
-- Official MCP registry metadata: `server.json` (`io.github.lefgk/agent-dapps-mcp`). Publishing needs GitHub auth via `mcp-publisher login github` and, for the npm package, a published `agent-dapps-mcp` package with matching `mcpName`.
-- Glama: `glama.json` names `Lefgk` as maintainer. Submitting a listing needs a public repo or a hosted HTTPS endpoint.
+- Official MCP registry metadata: `server.json` (`io.github.lefgk/agent-dapps-mcp`), listed as a remote-only Streamable HTTP server at `https://agent-dapps-mcp.graph-proxy.workers.dev/mcp`. This package is not published to npm.
+- Glama: `glama.json` names `Lefgk` as maintainer.
 
 Discovery files (`llms.txt` and `/.well-known/ai-catalog.json`) are also on each dapp site.
 
