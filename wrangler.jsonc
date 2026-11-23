@@ -1,0 +1,13 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "agent-dapps-mcp",
+  "main": "src/worker.ts",
+  "compatibility_date": "2026-11-23",
+  "observability": {
+    "enabled": true,
+    "traces": { "enabled": true }
+  },
+  "vars": {
+    "BASE_RPC_URL": "https://mainnet.base.org"
+  }
+}

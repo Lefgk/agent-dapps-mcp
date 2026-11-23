@@ -1,0 +1,65 @@
+{
+  "name": "agent-dapps-mcp",
+  "version": "1.0.0",
+  "description": "MCP server and AgentKit plugin for Lef's 10 agent dapps on Base. Builds unsigned transactions only; never holds keys or broadcasts.",
+  "mcpName": "io.github.lefgk/agent-dapps-mcp",
+  "type": "module",
+  "license": "MIT",
+  "author": "Lef Giak <lg.playstudio@gmail.com>",
+  "bugs": {
+    "email": "lg.playstudio@gmail.com"
+  },
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/Lefgk/agent-dapps-mcp.git"
+  },
+  "bin": {
+    "agent-dapps-mcp": "./dist/mcp/stdio.js"
+  },
+  "main": "./dist/index.js",
+  "exports": {
+    ".": "./dist/index.js",
+    "./agentkit": "./dist/agentkit/provider.js"
+  },
+  "files": [
+    "dist",
+    "server.json",
+    "glama.json",
+    "README.md"
+  ],
+  "engines": {
+    "node": ">=20"
+  },
+  "scripts": {
+    "build": "tsc -p tsconfig.json && chmod +x dist/mcp/stdio.js",
+    "start": "node dist/mcp/stdio.js",
+    "dev": "wrangler dev",
+    "types": "wrangler types",
+    "test": "vitest run test/unit",
+    "test:fork": "vitest run test/fork --testTimeout 180000",
+    "test:smoke": "vitest run test/smoke --testTimeout 120000",
+    "test:all": "npm test && npm run test:fork && npm run test:smoke",
+    "typecheck": "tsc -p tsconfig.json --noEmit",
+    "dry-run": "wrangler deploy --dry-run"
+  },
+  "dependencies": {
+    "@modelcontextprotocol/server": "^2.4.0",
+    "viem": "^2.58.4",
+    "zod": "^4.6.7"
+  },
+  "peerDependencies": {
+    "@coinbase/agentkit": "^0.10.4"
+  },
+  "peerDependenciesMeta": {
+    "@coinbase/agentkit": {
+      "optional": true
+    }
+  },
+  "devDependencies": {
+    "@coinbase/agentkit": "^0.10.4",
+    "@types/node": "^24.10.1",
+    "typescript": "^5.9.3",
+    "vitest": "^5.1.1",
+    "wrangler": "^4.166.0"
+  }
+}
