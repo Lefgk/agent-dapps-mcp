@@ -1,0 +1,14 @@
+{
+  "name": "agent-dapps-docs",
+  "private": true,
+  "type": "module",
+  "description": "Public docs site for the Base agent dapps. Not published by this repo.",
+  "scripts": {
+    "dev": "vitepress dev",
+    "build": "vitepress build",
+    "preview": "vitepress preview"
+  },
+  "devDependencies": {
+    "vitepress": "^1.6.4"
+  }
+}

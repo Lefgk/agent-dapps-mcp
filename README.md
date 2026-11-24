@@ -110,6 +110,10 @@ Fork tests create vaults on the official factories, impersonate owners only for 
 
 Discovery files (`llms.txt` and `/.well-known/ai-catalog.json`) are also on each dapp site.
 
+## Docs site
+
+User-facing docs for all ten dapps (how each works, addresses, fees, risks, FAQ) live in `docs-site/` (VitePress). Preview with `cd docs-site && npm install && npm run dev`. See `docs-site/README.md`.
+
 ## Security
 
 - No private keys, seed phrases, or API secrets in this repo or in the server.
