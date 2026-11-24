@@ -8,10 +8,14 @@ import {
   parseBytes32,
   parseHex,
   parseOpaqueString,
+  parseUint160,
   parseUint256,
+  parseUint32,
+  parseUint48,
   parseUint64,
   parseUint8,
 } from "../validate.js";
+import * as f from "./fields.js";
 import {
   assertFactoryInstance,
   buildAndSimulate,
@@ -57,7 +61,8 @@ async function buildPanicAsAccount(
 }
 
 
-const fromField = z.string().describe("EOA that would send the transaction. Used only for simulation. This server does not sign or broadcast.");
+const fromField = f.from;
+const usdcAmount = (what: string) => f.uint(`${what} in USDC base units (6 decimals: "1000000" = 1 USDC)`);
 
 async function knownVaultSpender(rpc: Parameters<ToolDef["handler"]>[1], dapp: Parameters<typeof assertFactoryInstance>[1], spender: Address) {
   await assertFactoryInstance(rpc, dapp, spender);
@@ -71,12 +76,14 @@ export const buildUsdcApprove: ToolDef = {
   ),
   inputSchema: z.object({
     from: fromField,
-    spender: z.string(),
-    amount: z.string().describe("Allowance in USDC base units (6 decimals)"),
-    dapp: z
-      .string()
-      .optional()
-      .describe("If spender is a vault or desk, the factory dapp id used to verify it."),
+    spender: f.address("Agentbond, Calltab or Prooflock contract, or an official vault/desk (then pass dapp)"),
+    amount: usdcAmount("Allowance"),
+    dapp: f
+      .action(
+        ["aave-guard-vault", "agent-credit-line", "circuit-vault", "limitdesk", "slipguard", "stepped-agent-line"] as const,
+        "If spender is a vault or desk, the factory dapp id used to verify it",
+      )
+      .optional(),
   }),
   async handler(args, rpc) {
     const from = parseAddress(args.from, "from");
@@ -128,12 +135,12 @@ export const buildAaveGuard: ToolDef = {
   ),
   inputSchema: z.object({
     from: fromField,
-    vault: z.string(),
-    action: z.enum(["borrow", "repay", "repayFor", "renounceAgent"]),
-    to: z.string().optional(),
-    amount: z.string().optional(),
-    agent: z.string().optional(),
-    memo: z.string().optional(),
+    vault: f.address("Official Aave Guard Vault address (from list_instances)"),
+    action: f.action(["borrow", "repay", "repayFor", "renounceAgent"] as const),
+    to: f.address("borrow: allowlisted recipient of the borrowed USDC").optional(),
+    amount: usdcAmount("borrow/repay/repayFor: amount").optional(),
+    agent: f.address("repayFor: agent whose debt to repay").optional(),
+    memo: f.memo("borrow: optional memo, 0x bytes32 or utf-8 text of at most 32 bytes").optional(),
   }),
   async handler(args, rpc) {
     const from = parseAddress(args.from, "from");
@@ -262,12 +269,12 @@ export const buildCreditLine: ToolDef = {
   ),
   inputSchema: z.object({
     from: fromField,
-    vault: z.string(),
-    action: z.enum(["borrow", "repay", "markDefault", "renounceAgent"]),
-    to: z.string().optional(),
-    amount: z.string().optional(),
-    agent: z.string().optional(),
-    memo: z.string().optional(),
+    vault: f.address("Official vault address (from list_instances)"),
+    action: f.action(["borrow", "repay", "markDefault", "renounceAgent"] as const),
+    to: f.address("borrow: recipient of the borrowed USDC").optional(),
+    amount: usdcAmount("borrow/repay: amount").optional(),
+    agent: f.address("repay: agent whose line to repay (defaults to from); markDefault: agent to mark").optional(),
+    memo: f.memo("borrow: optional memo, 0x bytes32 or utf-8 text of at most 32 bytes").optional(),
   }),
   handler: (args, rpc) => buildCreditLike("agent-credit-line", "Agent Credit Line", args, rpc),
 };
@@ -280,12 +287,12 @@ export const buildStepped: ToolDef = {
   ),
   inputSchema: z.object({
     from: fromField,
-    vault: z.string(),
-    action: z.enum(["borrow", "repay", "markDefault", "renounceAgent"]),
-    to: z.string().optional(),
-    amount: z.string().optional(),
-    agent: z.string().optional(),
-    memo: z.string().optional(),
+    vault: f.address("Official vault address (from list_instances)"),
+    action: f.action(["borrow", "repay", "markDefault", "renounceAgent"] as const),
+    to: f.address("borrow: recipient of the borrowed USDC").optional(),
+    amount: usdcAmount("borrow/repay: amount").optional(),
+    agent: f.address("repay: agent whose line to repay (defaults to from); markDefault: agent to mark").optional(),
+    memo: f.memo("borrow: optional memo, 0x bytes32 or utf-8 text of at most 32 bytes").optional(),
   }),
   handler: (args, rpc) => buildCreditLike("stepped-agent-line", "Stepped Agent Line", args, rpc),
 };
@@ -298,10 +305,10 @@ export const buildCircuit: ToolDef = {
   ),
   inputSchema: z.object({
     from: fromField,
-    vault: z.string(),
-    action: z.enum(["rebalance", "trip", "checkpoint"]),
-    strategy: z.string().optional(),
-    targetAssets: z.string().optional(),
+    vault: f.address("Official Circuit Vault address (from list_instances)"),
+    action: f.action(["rebalance", "trip", "checkpoint"] as const),
+    strategy: f.address("rebalance: whitelisted strategy address (see read_circuit_vault strategies)").optional(),
+    targetAssets: usdcAmount("rebalance: target assets for the strategy").optional(),
   }),
   async handler(args, rpc) {
     const from = parseAddress(args.from, "from");
@@ -347,13 +354,13 @@ export const buildSlipguard: ToolDef = {
   ),
   inputSchema: z.object({
     from: fromField,
-    vault: z.string(),
-    action: z.enum(["executeSwap", "wrapETH", "renounceAgent"]),
-    tokenIn: z.string().optional(),
-    tokenOut: z.string().optional(),
-    amountIn: z.string().optional(),
-    router: z.string().optional(),
-    data: z.string().optional(),
+    vault: f.address("Official Slipguard vault address (from list_instances)"),
+    action: f.action(["executeSwap", "wrapETH", "renounceAgent"] as const),
+    tokenIn: f.address("executeSwap: token to sell (must be allowlisted)").optional(),
+    tokenOut: f.address("executeSwap: token to buy (must be allowlisted)").optional(),
+    amountIn: f.uint("executeSwap: amount of tokenIn in its base units").optional(),
+    router: f.address("executeSwap: allowlisted router").optional(),
+    data: f.hex("executeSwap: router calldata, opaque bytes (max 16384 bytes)").optional(),
   }),
   async handler(args, rpc) {
     const from = parseAddress(args.from, "from");
@@ -402,20 +409,20 @@ export const buildLimitdesk: ToolDef = {
   ),
   inputSchema: z.object({
     from: fromField,
-    desk: z.string(),
-    action: z.enum(["post", "fill", "cancel", "invalidateNonce", "renounceAgent"]),
-    orderId: z.string().optional(),
-    agent: z.string().optional(),
-    nonce: z.string().optional(),
-    signature: z.string().optional(),
-    tokenSell: z.string().optional(),
-    tokenBuy: z.string().optional(),
-    amountSell: z.string().optional(),
-    limitPriceX18: z.string().optional(),
-    stopTriggerX18: z.string().optional(),
-    expiry: z.string().optional(),
-    orderType: z.string().optional(),
-    epoch: z.string().optional(),
+    desk: f.address("Official Limitdesk address (from list_instances)"),
+    action: f.action(["post", "fill", "cancel", "invalidateNonce", "renounceAgent"] as const),
+    orderId: f.bytes32("fill/cancel: order id").optional(),
+    agent: f.address("post/invalidateNonce: agent that signed the order").optional(),
+    nonce: f.uint("post/invalidateNonce: order nonce").optional(),
+    signature: f.hex("post: 65-byte EIP-712 signature by the agent, opaque bytes").optional(),
+    tokenSell: f.address("post: token to sell").optional(),
+    tokenBuy: f.address("post: token to buy").optional(),
+    amountSell: f.uint("post: amount of tokenSell in its base units").optional(),
+    limitPriceX18: f.uint("post: limit price scaled by 1e18").optional(),
+    stopTriggerX18: f.uint("post: optional stop trigger scaled by 1e18 (default 0)").optional(),
+    expiry: f.uint("post: order expiry, unix seconds (uint64)").optional(),
+    orderType: f.uint("post: optional order type (uint8, default 0)").optional(),
+    epoch: f.uint("post: optional agent epoch (uint32, default 0)").optional(),
   }),
   async handler(args, rpc) {
     const from = parseAddress(args.from, "from");
@@ -434,7 +441,7 @@ export const buildLimitdesk: ToolDef = {
         expiry: parseUint64(args.expiry, "expiry"),
         nonce: parseUint256(args.nonce, "nonce"),
         orderType: Number(parseUint8(args.orderType ?? "0", "orderType")),
-        epoch: Number(parseUint256(args.epoch ?? "0", "epoch")),
+        epoch: Number(parseUint32(args.epoch ?? "0", "epoch")),
       };
       const signature = parseHex(args.signature, "signature", { minBytes: 65, maxBytes: 65 });
       return buildAndSimulate(rpc, {
@@ -447,7 +454,7 @@ export const buildLimitdesk: ToolDef = {
       });
     }
     if (args.action === "fill") {
-      const orderId = parseBytes32(args.orderId, "orderId");
+      const orderId = parseBytes32(args.orderId, "orderId", { allowText: false });
       return buildAndSimulate(rpc, {
         to: desk,
         abi,
@@ -458,7 +465,7 @@ export const buildLimitdesk: ToolDef = {
       });
     }
     if (args.action === "cancel") {
-      const orderId = parseBytes32(args.orderId, "orderId");
+      const orderId = parseBytes32(args.orderId, "orderId", { allowText: false });
       return buildAndSimulate(rpc, {
         to: desk,
         abi,
@@ -498,28 +505,37 @@ export const buildRevoke: ToolDef = {
   ),
   inputSchema: z.object({
     from: fromField,
-    action: z.enum(["panic", "panicWith", "panicAsModule"]),
-    safe: z.string().optional(),
+    action: f.action(["panic", "panicWith", "panicAsModule"] as const),
+    safe: f.address("panicAsModule: Safe that enabled PanicRevoke as a module").optional(),
     erc20: z
-      .array(z.object({ token: z.string(), spender: z.string() }))
+      .array(z.object({ token: f.address("ERC-20 token"), spender: f.address("Spender to zero") }).strict())
+      .max(64, { error: "at most 64 pairs" })
       .optional()
-      .describe("ERC-20 token/spender pairs for panicWith"),
-    permit2Pairs: z.array(z.object({ token: z.string(), spender: z.string() })).optional(),
+      .describe("panicWith: ERC-20 token/spender pairs to zero"),
+    permit2Pairs: z
+      .array(z.object({ token: f.address("Token"), spender: f.address("Permit2 spender to zero") }).strict())
+      .max(64, { error: "at most 64 pairs" })
+      .optional()
+      .describe("panicWith: Permit2 token/spender pairs to zero"),
     spendPerms: z
       .array(
-        z.object({
-          account: z.string(),
-          spender: z.string(),
-          token: z.string(),
-          allowance: z.string(),
-          period: z.string(),
-          start: z.string(),
-          end: z.string(),
-          salt: z.string(),
-          extraData: z.string().optional(),
-        }),
+        z
+          .object({
+            account: f.address("Smart account"),
+            spender: f.address("Spender"),
+            token: f.address("Token"),
+            allowance: f.uint("uint160 allowance"),
+            period: f.uint("uint48 period, seconds"),
+            start: f.uint("uint48 start, unix seconds"),
+            end: f.uint("uint48 end, unix seconds"),
+            salt: f.uint("uint256 salt"),
+            extraData: f.hex("Optional extra data (max 1024 bytes)").optional(),
+          })
+          .strict(),
       )
-      .optional(),
+      .max(64, { error: "at most 64 spend permissions" })
+      .optional()
+      .describe("panicWith: Coinbase Spend Permissions to revoke"),
   }),
   async handler(args, rpc) {
     const from = parseAddress(args.from, "from");
@@ -554,10 +570,10 @@ export const buildRevoke: ToolDef = {
             account: parseAddress(rec.account, `spendPerms[${i}].account`),
             spender: parseAddress(rec.spender, `spendPerms[${i}].spender`),
             token: parseAddress(rec.token, `spendPerms[${i}].token`),
-            allowance: parseUint256(rec.allowance, `spendPerms[${i}].allowance`),
-            period: Number(parseUint64(rec.period, `spendPerms[${i}].period`)),
-            start: Number(parseUint64(rec.start, `spendPerms[${i}].start`)),
-            end: Number(parseUint64(rec.end, `spendPerms[${i}].end`)),
+            allowance: parseUint160(rec.allowance, `spendPerms[${i}].allowance`),
+            period: Number(parseUint48(rec.period, `spendPerms[${i}].period`)),
+            start: Number(parseUint48(rec.start, `spendPerms[${i}].start`)),
+            end: Number(parseUint48(rec.end, `spendPerms[${i}].end`)),
             salt: parseUint256(rec.salt, `spendPerms[${i}].salt`),
             extraData: parseHex(rec.extraData ?? "0x", `spendPerms[${i}].extraData`, { maxBytes: 1024 }),
           };
@@ -581,7 +597,7 @@ export const buildAgentbond: ToolDef = {
   ),
   inputSchema: z.object({
     from: fromField,
-    action: z.enum([
+    action: f.action([
       "depositForAgent",
       "depositForAccount",
       "fileClaim",
@@ -593,17 +609,17 @@ export const buildAgentbond: ToolDef = {
       "withdraw",
       "setArbiter",
       "applyArbiter",
-    ]),
-    agentId: z.string().optional(),
-    account: z.string().optional(),
-    arbiter: z.string().optional(),
-    amount: z.string().optional(),
-    key: z.string().optional(),
-    claimId: z.string().optional(),
-    evidenceURI: z.string().optional(),
-    slashAmount: z.string().optional(),
-    reasonHash: z.string().optional(),
-    newArbiter: z.string().optional(),
+    ] as const),
+    agentId: f.uint("depositForAgent: ERC-8004 agent id").optional(),
+    account: f.address("depositForAccount: account the bond is bound to").optional(),
+    arbiter: f.address("depositForAgent/depositForAccount: arbiter who can slash").optional(),
+    amount: usdcAmount("deposit/fileClaim/requestWithdraw: amount").optional(),
+    key: f.bytes32("Bond key (from read_agentbond) for claims, withdrawals and arbiter changes").optional(),
+    claimId: f.uint("cancelClaim/expireClaim/resolveClaim: claim id").optional(),
+    evidenceURI: f.text("fileClaim: evidence URI, opaque data").optional(),
+    slashAmount: usdcAmount("resolveClaim: amount to slash (0 to reject the claim)").optional(),
+    reasonHash: f.memo("resolveClaim: optional reason, 0x bytes32 or utf-8 text of at most 32 bytes").optional(),
+    newArbiter: f.address("setArbiter: proposed new arbiter").optional(),
   }),
   async handler(args, rpc) {
     const from = parseAddress(args.from, "from");
@@ -641,8 +657,9 @@ export const buildAgentbond: ToolDef = {
       });
     }
     if (action === "fileClaim") {
-      const key = parseBytes32(args.key, "key");
+      const key = parseBytes32(args.key, "key", { allowText: false });
       const amount = parseUint256(args.amount, "amount");
+      if (amount === 0n) throw new ToolError("amount must be greater than 0.");
       const evidenceURI = parseOpaqueString(args.evidenceURI, "evidenceURI", 2048);
       if (evidenceURI.length === 0) throw new ToolError("evidenceURI must not be empty.");
       return buildAndSimulate(rpc, {
@@ -678,9 +695,10 @@ export const buildAgentbond: ToolDef = {
         summary: `Resolve claim ${claimId.toString()} with slash ${slashAmount.toString()}.`,
       });
     }
-    const key = parseBytes32(args.key, "key");
+    const key = parseBytes32(args.key, "key", { allowText: false });
     if (action === "requestWithdraw") {
       const amount = parseUint256(args.amount, "amount");
+      if (amount === 0n) throw new ToolError("amount must be greater than 0.");
       return buildAndSimulate(rpc, {
         to,
         abi,
@@ -723,7 +741,7 @@ export const buildCalltab: ToolDef = {
   ),
   inputSchema: z.object({
     from: fromField,
-    action: z.enum([
+    action: f.action([
       "openTab",
       "topUp",
       "setAgent",
@@ -732,20 +750,20 @@ export const buildCalltab: ToolDef = {
       "redeem",
       "initiateClose",
       "finalizeClose",
-    ]),
-    tabId: z.string().optional(),
-    provider: z.string().optional(),
-    amount: z.string().optional(),
-    periodCap: z.string().optional(),
-    periodDuration: z.string().optional(),
-    expiry: z.string().optional(),
-    challengeWindow: z.string().optional(),
-    agent: z.string().optional(),
-    payerAgentId: z.string().optional(),
-    providerAgentId: z.string().optional(),
-    cumulativeAmount: z.string().optional(),
-    deadline: z.string().optional(),
-    signature: z.string().optional(),
+    ] as const),
+    tabId: f.uint("Tab id for every action except openTab").optional(),
+    provider: f.address("openTab: provider who redeems vouchers").optional(),
+    amount: usdcAmount("openTab/topUp: deposit").optional(),
+    periodCap: usdcAmount("openTab: optional per-period redeem cap (default 0 = none)").optional(),
+    periodDuration: f.uint("openTab: optional period length, seconds (default 0)").optional(),
+    expiry: f.uint("openTab: tab expiry, unix seconds").optional(),
+    challengeWindow: f.uint("openTab: close challenge window, seconds").optional(),
+    agent: f.address("openTab: optional voucher signer (defaults to from); setAgent: new signer (zero address clears)").optional(),
+    payerAgentId: f.uint("openTab: optional ERC-8004 payer agent id").optional(),
+    providerAgentId: f.uint("openTab: optional ERC-8004 provider agent id").optional(),
+    cumulativeAmount: usdcAmount("redeem: cumulative voucher amount").optional(),
+    deadline: f.uint("redeem: voucher deadline, unix seconds").optional(),
+    signature: f.hex("redeem: 65-byte EIP-712 voucher signature, opaque bytes").optional(),
   }),
   async handler(args, rpc) {
     const from = parseAddress(args.from, "from");
@@ -836,7 +854,7 @@ export const buildProoflock: ToolDef = {
   ),
   inputSchema: z.object({
     from: fromField,
-    action: z.enum([
+    action: f.action([
       "createJob",
       "postBond",
       "deliver",
@@ -846,21 +864,21 @@ export const buildProoflock: ToolDef = {
       "dispute",
       "resolve",
       "resolveStaleDispute",
-    ]),
-    jobId: z.string().optional(),
-    provider: z.string().optional(),
-    arbiter: z.string().optional(),
-    amount: z.string().optional(),
-    deadline: z.string().optional(),
-    reviewWindow: z.string().optional(),
-    bondRequired: z.string().optional(),
-    clientAgentId: z.string().optional(),
-    providerAgentId: z.string().optional(),
-    metadataURI: z.string().optional(),
-    deliverableHash: z.string().optional(),
-    deliverableURI: z.string().optional(),
-    providerPayout: z.string().optional(),
-    slashBond: z.boolean().optional(),
+    ] as const),
+    jobId: f.uint("Job id for every action except createJob").optional(),
+    provider: f.address("createJob: provider who delivers").optional(),
+    arbiter: f.address("createJob: arbiter for disputes").optional(),
+    amount: usdcAmount("createJob: escrow amount").optional(),
+    deadline: f.uint("createJob: delivery deadline, unix seconds").optional(),
+    reviewWindow: f.uint("createJob: review window after delivery, seconds").optional(),
+    bondRequired: usdcAmount("createJob: optional provider bond (default 0)").optional(),
+    clientAgentId: f.uint("createJob: optional ERC-8004 client agent id").optional(),
+    providerAgentId: f.uint("createJob: optional ERC-8004 provider agent id").optional(),
+    metadataURI: f.text("createJob: optional metadata URI, opaque data").optional(),
+    deliverableHash: f.bytes32("deliver: 32-byte hash of the deliverable").optional(),
+    deliverableURI: f.text("deliver: optional deliverable URI, opaque data").optional(),
+    providerPayout: usdcAmount("resolve: amount paid to the provider; the rest is refunded").optional(),
+    slashBond: z.boolean({ error: "must be true or false" }).optional().describe("resolve: whether to slash the provider bond"),
   }),
   async handler(args, rpc) {
     const from = parseAddress(args.from, "from");
@@ -904,7 +922,7 @@ export const buildProoflock: ToolDef = {
       });
     }
     if (action === "deliver") {
-      const deliverableHash = parseBytes32(args.deliverableHash, "deliverableHash");
+      const deliverableHash = parseBytes32(args.deliverableHash, "deliverableHash", { allowText: false });
       const deliverableURI = parseOpaqueString(args.deliverableURI ?? "", "deliverableURI", 2048);
       return buildAndSimulate(rpc, {
         to,

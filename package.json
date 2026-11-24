@@ -40,6 +40,7 @@
     "test:smoke": "vitest run test/smoke --testTimeout 120000",
     "test:all": "npm test && npm run test:fork && npm run test:smoke",
     "typecheck": "tsc -p tsconfig.json --noEmit",
+    "docs:tools": "npm run build && node scripts/tools-md.mjs",
     "dry-run": "wrangler deploy --dry-run"
   },
   "dependencies": {

@@ -28,6 +28,16 @@ export type Rpc = {
     stateOverride?: { address: Address; code: Hex }[];
   }) => Promise<CallResult>;
   getCode: (address: Address) => Promise<Hex | undefined>;
+  /** eth_estimateGas. Never sends anything. */
+  estimateGas?: (args: {
+    to: Address;
+    data: Hex;
+    from: Address;
+    value?: bigint;
+    stateOverride?: { address: Address; code: Hex }[];
+  }) => Promise<{ ok: true; gas: bigint } | { ok: false; reason: string }>;
+  /** eth_gasPrice in wei. */
+  getGasPrice?: () => Promise<bigint>;
 };
 
 export function createRpc(url = DEFAULT_RPC_URL): Rpc {
@@ -40,6 +50,23 @@ export function createRpc(url = DEFAULT_RPC_URL): Rpc {
     async getCode(address) {
       const code = await client.getCode({ address });
       return code;
+    },
+    async estimateGas({ to, data, from, value, stateOverride }) {
+      try {
+        const gas = await client.estimateGas({
+          to,
+          data,
+          account: from,
+          value: value ?? 0n,
+          stateOverride: stateOverride?.map((s) => ({ address: s.address, code: s.code })),
+        });
+        return { ok: true, gas };
+      } catch (err) {
+        return { ok: false, reason: formatRevert(err) };
+      }
+    },
+    async getGasPrice() {
+      return client.getGasPrice();
     },
     async call({ to, data, from, value, stateOverride }) {
       try {

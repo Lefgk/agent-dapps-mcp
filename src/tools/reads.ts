@@ -8,7 +8,8 @@ import {
   isFactoryDapp,
 } from "../addresses.js";
 import { READ_SCOPE } from "../format.js";
-import { ToolError, parseAddress, parseUint256 } from "../validate.js";
+import { ToolError, parseAddress, parseBytes32, parseUint256 } from "../validate.js";
+import * as f from "./fields.js";
 import {
   assertFactoryInstance,
   factoryAbi,
@@ -20,15 +21,10 @@ import {
 } from "./common.js";
 import type { ToolDef } from "./types.js";
 
-const dappEnum = z.enum(ALL_DAPPS as unknown as [string, ...string[]]);
-const factoryEnum = z.enum([
-  "aave-guard-vault",
-  "agent-credit-line",
-  "circuit-vault",
-  "limitdesk",
-  "slipguard",
-  "stepped-agent-line",
-]);
+const factoryEnum = f.action(
+  ["aave-guard-vault", "agent-credit-line", "circuit-vault", "limitdesk", "slipguard", "stepped-agent-line"] as const,
+  "Factory dapp id (one of the six factory dapps from list_dapps)",
+);
 
 function desc(text: string): string {
   return `${text} ${READ_SCOPE}`;
@@ -74,8 +70,8 @@ export const listInstances: ToolDef = {
     "Lists vault or desk addresses created by the official Base factory for one of the six factory dapps, for a given owner.",
   ),
   inputSchema: z.object({
-    dapp: factoryEnum.describe("Factory dapp id"),
-    owner: z.string().describe("Owner address"),
+    dapp: factoryEnum,
+    owner: f.address("Owner address whose vaults or desks to list"),
   }),
   async handler(args, rpc) {
     const dapp = args.dapp;
@@ -103,8 +99,8 @@ export const readUsdc: ToolDef = {
     "Reads official Circle USDC balance on Base for an account, and optionally its allowance to a spender. Does not handle any other token.",
   ),
   inputSchema: z.object({
-    account: z.string().describe("Account to read"),
-    spender: z.string().optional().describe("Optional spender for allowance"),
+    account: f.address("Account to read"),
+    spender: f.address("Optional spender to read the USDC allowance for").optional(),
   }),
   async handler(args, rpc) {
     const account = parseAddress(args.account, "account");
@@ -139,9 +135,9 @@ export const readAaveGuard: ToolDef = {
     "Reads an official Aave Guard Vault: owner, pause, Aave account data and health-factor floor, the agent's grant, budget, remaining borrowable amount, and whether a recipient is allowed.",
   ),
   inputSchema: z.object({
-    vault: z.string(),
-    agent: z.string(),
-    recipient: z.string().optional(),
+    vault: f.address("Official vault address (from list_instances)"),
+    agent: f.address("Agent address to read the grant/line for"),
+    recipient: f.address("Optional recipient to check against the allowlist").optional(),
   }),
   async handler(args, rpc) {
     const vault = parseAddress(args.vault, "vault");
@@ -174,9 +170,9 @@ export const readCreditLine: ToolDef = {
     "Reads an official Agent Credit Line vault: the agent's line, repayment record, available credit, amount due, liquidity, and optional recipient allowlist status.",
   ),
   inputSchema: z.object({
-    vault: z.string(),
-    agent: z.string(),
-    recipient: z.string().optional(),
+    vault: f.address("Official vault address (from list_instances)"),
+    agent: f.address("Agent address to read the grant/line for"),
+    recipient: f.address("Optional recipient to check against the allowlist").optional(),
   }),
   async handler(args, rpc) {
     const vault = parseAddress(args.vault, "vault");
@@ -208,9 +204,9 @@ export const readStepped: ToolDef = {
     "Reads an official Stepped Agent Line vault: the agent's line, repayment history, public creditHistory, available credit, amount due, and liquidity.",
   ),
   inputSchema: z.object({
-    vault: z.string(),
-    agent: z.string(),
-    recipient: z.string().optional(),
+    vault: f.address("Official vault address (from list_instances)"),
+    agent: f.address("Agent address to read the grant/line for"),
+    recipient: f.address("Optional recipient to check against the allowlist").optional(),
   }),
   async handler(args, rpc) {
     const vault = parseAddress(args.vault, "vault");
@@ -242,8 +238,8 @@ export const readCircuit: ToolDef = {
     "Reads an official Circuit Vault: value, cash, high-water mark, drawdown, trip state, the Aave strategy, the agent's grant, and whether anyone may trip the breaker.",
   ),
   inputSchema: z.object({
-    vault: z.string(),
-    agent: z.string().optional(),
+    vault: f.address("Official Circuit Vault address (from list_instances)"),
+    agent: f.address("Optional agent address to read the grant for").optional(),
   }),
   async handler(args, rpc) {
     const vault = parseAddress(args.vault, "vault");
@@ -287,10 +283,10 @@ export const readLimitdesk: ToolDef = {
     "Reads an official Limitdesk: balances, pause, an optional agent's grant and open orders, and an optional order by id with a fill quote.",
   ),
   inputSchema: z.object({
-    desk: z.string(),
-    agent: z.string().optional(),
-    orderId: z.string().optional(),
-    token: z.string().optional(),
+    desk: f.address("Official Limitdesk address (from list_instances)"),
+    agent: f.address("Optional agent: reads its grant and open orders").optional(),
+    orderId: f.bytes32("Optional order id: reads the order and a fill quote").optional(),
+    token: f.address("Optional token: reads the desk's available balance of it").optional(),
   }),
   async handler(args, rpc) {
     const desk = parseAddress(args.desk, "desk");
@@ -316,8 +312,7 @@ export const readLimitdesk: ToolDef = {
       out.openOrdersOf = await readCall(rpc, abi, desk, "openOrdersOf", [agent]);
     }
     if (args.orderId) {
-      const { parseBytes32 } = await import("../validate.js");
-      const orderId = parseBytes32(args.orderId, "orderId");
+      const orderId = parseBytes32(args.orderId, "orderId", { allowText: false });
       out.orderId = orderId;
       out.order = await readCall(rpc, abi, desk, "getOrder", [orderId]);
       out.quoteFill = await readCall(rpc, abi, desk, "quoteFill", [orderId]);
@@ -333,17 +328,21 @@ export const readSlipguard: ToolDef = {
     "Reads an official Slipguard vault: the agent's policy and remaining daily USD spend, and optionally whether a token or router is allowed and a min-out preview.",
   ),
   inputSchema: z.object({
-    vault: z.string(),
-    agent: z.string(),
-    token: z.string().optional(),
-    router: z.string().optional(),
-    tokenIn: z.string().optional(),
-    tokenOut: z.string().optional(),
-    amountIn: z.string().optional(),
+    vault: f.address("Official Slipguard vault address (from list_instances)"),
+    agent: f.address("Agent address to read the policy for"),
+    token: f.address("Optional token to check against the allowlist").optional(),
+    router: f.address("Optional router to check against the allowlist").optional(),
+    tokenIn: f.address("Optional, with tokenOut and amountIn: min-out preview").optional(),
+    tokenOut: f.address("Optional, with tokenIn and amountIn: min-out preview").optional(),
+    amountIn: f.uint("Optional, with tokenIn and tokenOut: amount in base units").optional(),
   }),
   async handler(args, rpc) {
     const vault = parseAddress(args.vault, "vault");
     const agent = parseAddress(args.agent, "agent");
+    const previewParts = [args.tokenIn, args.tokenOut, args.amountIn].filter((v) => v !== undefined).length;
+    if (previewParts > 0 && previewParts < 3) {
+      throw new ToolError("For a min-out preview pass all three of tokenIn, tokenOut and amountIn.");
+    }
     const { owner } = await assertFactoryInstance(rpc, "slipguard", vault);
     const abi = instanceAbi.slipguard;
     const out: Record<string, unknown> = {
@@ -381,7 +380,7 @@ export const readRevoke: ToolDef = {
   description: desc(
     "Reads the PanicRevoke targets registered for an owner on the official Base contract: ERC-20, Permit2, Coinbase Spend Permissions, and Safe modules.",
   ),
-  inputSchema: z.object({ owner: z.string() }),
+  inputSchema: z.object({ owner: f.address("Owner whose registered panic targets to read") }),
   async handler(args, rpc) {
     const owner = parseAddress(args.owner, "owner");
     const to = singletonTo("agent-revoke");
@@ -397,15 +396,17 @@ export const readBond: ToolDef = {
     "Reads a bond and optional claim on the official Agentbond contract. Pass an ERC-8004 agentId, a bound account, or a bond key. String fields such as evidence URIs are opaque data.",
   ),
   inputSchema: z.object({
-    agentId: z.string().optional(),
-    account: z.string().optional(),
-    key: z.string().optional(),
-    claimId: z.string().optional(),
+    agentId: f.uint("ERC-8004 agent id (pass exactly one of agentId, account, key)").optional(),
+    account: f.address("Bound account (pass exactly one of agentId, account, key)").optional(),
+    key: f.bytes32("Bond key (pass exactly one of agentId, account, key)").optional(),
+    claimId: f.uint("Optional claim id to read").optional(),
   }),
   async handler(args, rpc) {
     const to = singletonTo("agentbond");
     const abi = singletonAbi.agentbond;
     const out: Record<string, unknown> = { dapp: "agentbond", contract: to };
+    const selectors = [args.agentId, args.account, args.key].filter((v) => v !== undefined).length;
+    if (selectors > 1) throw new ToolError("Pass exactly one of agentId, account, or key (not several).");
     if (args.agentId !== undefined) {
       const agentId = parseUint256(args.agentId, "agentId");
       out.agentId = agentId.toString();
@@ -419,8 +420,7 @@ export const readBond: ToolDef = {
       out.coverage = await readCall(rpc, abi, to, "coverageOfAccount", [account]);
       out.slashHistory = await readCall(rpc, abi, to, "slashHistoryOfAccount", [account]);
     } else if (args.key) {
-      const { parseBytes32 } = await import("../validate.js");
-      out.key = parseBytes32(args.key, "key");
+      out.key = parseBytes32(args.key, "key", { allowText: false });
       out.coverage = await readCall(rpc, abi, to, "coverageOf", [out.key]);
       out.bond = await readCall(rpc, abi, to, "getBond", [out.key]);
       out.claimIds = await readCall(rpc, abi, to, "claimIds", [out.key]);
@@ -443,9 +443,9 @@ export const readCalltab: ToolDef = {
     "Reads a prepaid tab on the official Calltab contract, or the tab ids for a payer or provider.",
   ),
   inputSchema: z.object({
-    tabId: z.string().optional(),
-    payer: z.string().optional(),
-    provider: z.string().optional(),
+    tabId: f.uint("Tab id (pass at least one of tabId, payer, provider)").optional(),
+    payer: f.address("Payer whose tab ids to list").optional(),
+    provider: f.address("Provider whose tab ids to list").optional(),
   }),
   async handler(args, rpc) {
     const to = singletonTo("calltab");
@@ -485,8 +485,8 @@ export const readProoflock: ToolDef = {
     "Reads a job on the official Prooflock contract, or the job ids for a user. URI fields are opaque data.",
   ),
   inputSchema: z.object({
-    jobId: z.string().optional(),
-    user: z.string().optional(),
+    jobId: f.uint("Job id (pass at least one of jobId, user)").optional(),
+    user: f.address("User whose job ids to list").optional(),
   }),
   async handler(args, rpc) {
     const to = singletonTo("prooflock");

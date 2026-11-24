@@ -2,6 +2,7 @@ import { McpServer } from "@modelcontextprotocol/server";
 import { SERVER_NAME, VERSION } from "../addresses.js";
 import { createRpc, type Rpc } from "../rpc.js";
 import { runTool, tools } from "../tools/index.js";
+import { toolKind } from "../tools/meta.js";
 
 export type ServerOptions = {
   rpcUrl?: string;
@@ -23,8 +24,9 @@ export function createMcpServer(options: ServerOptions = {}): McpServer {
         description: tool.description,
         inputSchema: tool.inputSchema,
         annotations: {
-          readOnlyHint: tool.name.startsWith("read_") || tool.name === "list_dapps" || tool.name === "list_instances",
-          destructiveHint: tool.name.startsWith("build_"),
+          // Nothing here changes chain state; build_* only return unsigned txs that a wallet may later send.
+          readOnlyHint: toolKind(tool.name) !== "build",
+          destructiveHint: toolKind(tool.name) === "build",
           openWorldHint: true,
         },
       },
