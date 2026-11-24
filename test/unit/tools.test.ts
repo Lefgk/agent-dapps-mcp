@@ -131,3 +131,18 @@ describe("assertFactoryInstance via list_instances", () => {
     expect(body.instances[0]).toBe(getAddress(vault));
   });
 });
+
+describe("docs/TOOLS.md", () => {
+  it("matches the shipped tool schemas (run `npm run docs:tools` to regenerate)", async () => {
+    const { readFileSync } = await import("node:fs");
+    const { toolsMarkdown } = await import("../../src/tools/docs.js");
+    const file = readFileSync(new URL("../../docs/TOOLS.md", import.meta.url), "utf8");
+    expect(file).toBe(toolsMarkdown());
+  });
+
+  it("README mentions every tool", async () => {
+    const { readFileSync } = await import("node:fs");
+    const readme = readFileSync(new URL("../../README.md", import.meta.url), "utf8");
+    for (const t of tools) expect(readme, t.name).toContain(`\`${t.name}\``);
+  });
+});

@@ -121,21 +121,44 @@ export async function usdcState(
   return { balance, allowance };
 }
 
+/** Thrown when a USDC pull would fail. Carries numbers so preflight_build can suggest the next step. */
+export class UsdcShortfallError extends ToolError {
+  constructor(
+    message: string,
+    readonly detail: {
+      kind: "balance" | "allowance";
+      owner: Address;
+      spender: Address;
+      required: bigint;
+      balance: bigint;
+      allowance: bigint;
+    },
+  ) {
+    super(message);
+    this.name = "UsdcShortfallError";
+  }
+}
+
 export async function requireUsdcAllowance(
   rpc: Rpc,
   from: Address,
   spender: Address,
   amount: bigint,
 ): Promise<void> {
-  const { balance, allowance } = await usdcState(rpc, from, spender);
+  const state = await usdcState(rpc, from, spender);
+  const balance = state.balance;
+  const allowance = state.allowance ?? 0n;
+  const detail = { owner: from, spender, required: amount, balance, allowance };
   if (balance < amount) {
-    throw new ToolError(
+    throw new UsdcShortfallError(
       `USDC balance of ${from} is ${balance.toString()}, which is less than the required ${amount.toString()}.`,
+      { kind: "balance", ...detail },
     );
   }
-  if ((allowance ?? 0n) < amount) {
-    throw new ToolError(
-      `USDC allowance of ${from} for ${spender} is ${(allowance ?? 0n).toString()}, which is less than the required ${amount.toString()}. Build an unsigned USDC approve first with build_usdc_approve.`,
+  if (allowance < amount) {
+    throw new UsdcShortfallError(
+      `USDC allowance of ${from} for ${spender} is ${allowance.toString()}, which is less than the required ${amount.toString()}. Build an unsigned USDC approve first with build_usdc_approve (spender ${spender}, amount "${amount.toString()}").`,
+      { kind: "allowance", ...detail },
     );
   }
 }
@@ -156,11 +179,17 @@ export async function buildAndSimulate(
   if (args.value && args.value !== 0n) {
     throw new ToolError("This server only builds unpaid (value = 0) transactions.");
   }
-  const data = encodeFunctionData({
-    abi: args.abi,
-    functionName: args.functionName,
-    args: (args.fnArgs ?? []) as never,
-  });
+  let data: Hex;
+  try {
+    data = encodeFunctionData({
+      abi: args.abi,
+      functionName: args.functionName,
+      args: (args.fnArgs ?? []) as never,
+    });
+  } catch (err) {
+    const msg = err instanceof Error ? ((err as { shortMessage?: string }).shortMessage ?? err.message) : String(err);
+    throw new ToolError(`Could not encode ${args.functionName}: ${msg.replace(/\s+/g, " ").slice(0, 300)}`);
+  }
   const sim = await rpc.call({ to: args.to, data, from: args.from, value: 0n });
   if (!sim.ok) {
     throw new ToolError(sim.reason);

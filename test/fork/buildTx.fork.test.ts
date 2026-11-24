@@ -143,6 +143,10 @@ async function build(name: string, args: Record<string, unknown>) {
   return JSON.parse(result.content[0]!.text) as { to: Address; data: Hex; value: string; chainId: number; from: Address; summary: string };
 }
 
+function pickTx(tx: { to: Address; data: Hex; value: string; from: Address }) {
+  return { to: tx.to, data: tx.data, value: tx.value, from: tx.from };
+}
+
 async function expectRevert(name: string, args: Record<string, unknown>, match: RegExp) {
   const rpc = createRpc(fork.url);
   const result = await runTool(name, args, rpc);
@@ -212,6 +216,23 @@ describe("fork: build-tx calldata against Base mainnet contracts", () => {
       amount: "1000000",
       memo: "test",
     });
+    // New helper tools against real Base contracts on the fork.
+    const found = await build("find_dapp", { query: creditVault });
+    expect((found as unknown as { match: string; dapps: { id: string }[] }).match).toBe("instance");
+    expect((found as unknown as { dapps: { id: string }[] }).dapps[0]!.id).toBe("agent-credit-line");
+    const decoded = (await build("decode_tx", { ...pickTx(borrowTx), chainId: 8453 })) as unknown as {
+      official: boolean;
+      function: string;
+      args: { to: string; amount: string };
+      warnings: string[];
+    };
+    expect(decoded.official).toBe(true);
+    expect(decoded.function).toBe("borrow");
+    expect(decoded.args.amount).toBe("1000000");
+    expect(decoded.warnings).toEqual([]);
+    const gas = (await build("estimate_gas", pickTx(borrowTx))) as unknown as { gas: string; suggestedGasLimit: string };
+    expect(BigInt(gas.gas)).toBeGreaterThan(21_000n);
+    expect(BigInt(gas.suggestedGasLimit)).toBeGreaterThan(BigInt(gas.gas));
     await sendBuilt(agent, borrowTx);
     await approveUsdc(agent, creditVault, 2_000_000n);
     const repayTx = await build("build_credit_line", {
@@ -455,11 +476,14 @@ describe("fork: build-tx calldata against Base mainnet contracts", () => {
     await mintUsdc(payer.address, 10_000n * 1_000_000n);
     await mintUsdc(provider.address, 10_000n * 1_000_000n);
 
-    const approve = await build("build_usdc_approve", {
-      from: payer.address,
-      spender: DAPPS.calltab.address,
-      amount: "5000000000",
-    });
+    const notReady = (await build("preflight_build", {
+      tool: "build_calltab",
+      args: { from: payer.address, action: "topUp", tabId: "1", amount: "5000000000" },
+    })) as unknown as { ready: boolean; nextSteps: { tool?: string; arguments?: Record<string, unknown> }[] };
+    expect(notReady.ready).toBe(false);
+    expect(notReady.nextSteps[0]!.tool).toBe("build_usdc_approve");
+    const approve = await build("build_usdc_approve", notReady.nextSteps[0]!.arguments!);
+    expect(approve.to).toBe(USDC);
     await sendBuilt(payer, approve);
 
     const challengeMin = 3600; // will be overwritten if the contract rejects; we read mins if needed
