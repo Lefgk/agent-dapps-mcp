@@ -1,0 +1,10 @@
+/* Text uses the full width of its container. */
+.vp-doc p,
+.vp-doc li {
+  max-width: none;
+}
+
+/* Long addresses must wrap, never be cut off. */
+.vp-doc code {
+  word-break: break-all;
+}
